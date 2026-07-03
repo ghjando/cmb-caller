@@ -1,0 +1,975 @@
+================================
+caller server 通訊協定 (2.8.2版)
+================================
+[change log]
+2.7.3 [2026/1/23]
+  --"5.登入驗証" "6.取號資訊" "16.參數設定"
+    "schedule_week" "schedule_extra" 補充說明 (若無資料，此欄為"")
+  --"18.查詢預約記錄"
+    "user_info" 補充說明 (若無資料，此欄為"")
+2.7.4 [2026/1/26]
+  --"5.登入驗証" "6.取號資訊"
+    移除欄位 "num_alias_prefix",  
+    新增欄位 "num_prefix", "prefix_alias"
+    新增欄位 "scan_qr_code_check"
+2.7.5 [2026/2/2]
+  --新增"19.店家重置叫號機"
+  --"11.重置叫號機" 新增 "注意事項"
+2.7.6 [2026/2/4]
+  --"7.同步Line取號" 新增欄位 "date", "time_period", "user_info"
+  --"12.取消號碼" 新增欄位 "date", "time_period"
+2.7.7 [2026/2/12]
+  --"5.登入驗証" "6.取號資訊"
+    新增欄位 "total_get_num", "total_call_num"
+2.7.8 [2026/2/24]
+  --"5.登入驗証" "6.取號資訊"
+    新增欄位 "reserve_time_limit_c"
+    參數設定 新增 "reserve_time_limit", "reserve_time_limit_c"
+    新增號碼狀態 reserved (對應 reserve_time_limit_c)
+  --"14.到號保留" 因應客戶需求恢復保留功能
+    移除欄位 "reserve" (只剩保留功能，無需 true/false)
+2.7.9 [2026/3/17]
+  --"5.登入驗証" "6.取號資訊"
+    新增欄位 "item_call_num" 各項目當前叫號 (若不支援"分段取號"，此欄為"")
+2.8.0 [2026/4/24]
+  --修改欄位名稱 (使 login 及 get_num_info 欄位名稱一致)
+    "5.登入驗証" "curr_num" => "call_num" (**舊欄位暫時並存，等前端程式修改完成，再行移除**)
+    "6.取號資訊" "curr_num" => "last_get_num" (**舊欄位暫時並存，等前端程式修改完成，再行移除**)
+  --"6.取號資訊" 新增回覆欄位, 使其與 "5.登入驗証" 回傳資料一致
+    新增欄位 "caller_name", "support_get_num", "get_num_switch"
+  ==================
+  京都堂管理系統需求
+  ==================
+  --"2.叫號回傳"
+    新增回覆欄位 "call_num", "prev_num", "change_time", "online_status"
+  --"5.登入驗証" "6.取號資訊"
+    新增回覆欄位 "prev_num", "change_time", "online_status"
+    [備註2]參數設定 新增 "shop_name", "callers", "caller_notes", "password", "early_call"
+  --新增"20.群組登入"
+2.8.1 [2026/5/25]
+  --"5.登入驗証" 新增注意事項
+    b.登入成功後，此 WebSocket 即綁定 caller_id, 只接受此 caller_id 執行指令
+  --各指令新增錯誤碼
+    006:illegal caller_id   // 非登入的 caller_id (由叫號機 server 回覆)
+  --修改廣播注意事項
+    當回覆封包 result="OK" 時, 才需進行廣播
+2.8.2 [2026/6/1]
+  --caller server 傳送指令前新增 "ws_id" 欄位  // WebSocket ID (由 caller server 填入)
+=======================================
+
+1.連線方式：
+使用 WebSocket 連接以下網址：
+[live site]   wss://callnum-receiver-410240967190.asia-east1.run.app
+[trial site]  wss://callnum-receiver-306511771181.asia-east1.run.app
+
+注意事項：
+連上線後，請馬上送出 {"source": "tawe"} 給中央 server，這樣同步資料的傳送才不會有空窗期
+=======================================
+
+2.叫號回傳：
+傳送
+{
+  "action": "call_number",          // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id (編碼規則：廠商名稱前兩字，各取漢語拼音的前兩個字母，例如：泰偉 tài wěi => tawe)
+  "caller_id": "12356",             // 叫號機 id
+  "call_num": 16,                   // 叫號機號碼 (無號碼則傳0，此是比照免排傳送方式) 
+  "change": true,                   // 號碼是否有變動 (true/false)
+  "last_update": 0,                 // 離線時間 0~10(分鐘)(大於10，則停止傳送)
+  "counter_name",                   // 櫃檯名稱 (若不支援多櫃檯，此欄為"")
+  "counter_num",                    // 櫃檯號碼 (若不支援多櫃檯，此欄為"")
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+回覆：
+{
+  "action": "call_number",          // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "12356",             // 叫號機 id
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+  "wait_time_avg": 180,             // 平均等候時間 (以秒為單位，此值未異動時回傳"")(若此值有異動，需同步到"使用者取號網頁")
+  "call_num": 16,                   // 目前號碼
+  "prev_num": 15,                   // 上次號碼
+  "change_time": 1766260801088,     // 最後跳號時間
+  "online_status": true,            // 在線狀態
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+002:caller not found                // 叫號機不存在
+004:not logged in                   // 尚未登入 (由叫號機 server 回覆)
+005:disconnected from the center    // 與中央 server 斷線 (由叫號機 server 回覆)
+006:illegal caller_id               // 非登入的 caller_id (由叫號機 server 回覆)
+009:other,<error text>              // 其他
+
+注意事項：
+若回覆封包 result="OK", 需同步廣播給此 caller_id 的所有 "店家網頁" 及 "訪客網頁"
+=======================================
+
+3.資料傳送時機：
+  -- 異動傳送："號碼有變動" 時即時傳送，"change" 欄位設為 true。
+  -- 例行傳送：每分鐘回報一次 "當前號碼" 及 "叫號機離線狀態"。(為了使 "叫叫我" 顯示 "資料更新時間" 及 "離線狀態")
+               ("change"欄位：call_num 或 last_update 有異動時，設為 true)
+               last_update 大於10，則停止傳送，等恢復連線再繼續。
+=======================================
+
+4.Cloud Run 定時斷線說明：
+"叫號資料接收器" 執行於 Cloud Run，每隔1小時(已設定為最長時間)會關閉 Socket 連線。
+建議 Client程式 在連線後接近1小時的時間(例如：3500秒)，自行產生一個 新Socket 來取代 舊Socket 傳送資料。
+這樣做的好處是可以無縫接續，不會有 "被斷線再重連" 的延遲時間(實測大約5秒)。
+=======================================
+
+5.登入驗証：
+傳送：
+{
+  "action": "login",                // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "password": "YV7X+xUEsMckopbXpp5sey+eosV8HYIGxa/fOS69/SU=", // 登入密碼 (需是加密型式，先進行 sha256, 再轉成 base64)
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+回覆：
+{
+  "action": "login",                // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+  "caller_name": "可蜜菈臉部彩繪",  // 叫號機名稱
+  (格式為"<店家名稱>;;<叫號機名稱>"，例如："Lay-D 你的茶飲;;外帶")
+  (註：若店家只有單一叫號機，則格式為"<店家名稱>")
+  "curr_num": "16",                 // (**將廢除，目前暫時保留**)目前叫號
+  "call_num": "16",                 // 目前叫號
+  "prev_num": 15,                   // 上次號碼
+  "change_time": 1766260801088,     // 最後跳號時間
+  "online_status": true,            // 在線狀態
+  "support_get_num": true,          // 支援取號 (true/false)
+  "last_get_num": "32",             // 最後取號 (若不支援取號服務，此欄為"")
+  "get_num_switch": "on",           // 取號開關 ("on"/"off") (若不支援取號服務，此欄為"")
+  "get_num_item_type": "人數",      // 取號項目型別 (若不支援"取號項目", 此欄為"")
+  "get_num_item_names": ["1~2人", "3~4人", "5人以上"], // 取號項目名稱 (項目id為 0,1,2)(若不支援"取號項目", 此欄為"")
+  "get_num_item_queue": ["23,25", "22,24", "26,27"],   // 取號項目號碼佇列 (項目id為 0,1,2)(若不支援"取號項目", 此欄為"")(此欄暫時保留，之後將被 get_num_item_data 取代)
+  "get_num_item_data": {"1":{}, "2":{}, "3":{}, "4":{}},  // 取號項目號碼資料 (每個號碼對應一個object，詳見備註1)  (不包含 removed 號碼) (若不支援"取號項目", 此欄為"")
+  "get_num_notes": "",              // 取號需知 (若不顯示取號需知，此欄設為"")(若不支援取號服務，此欄為"")
+  "support_reserve_num": true,      // 支援到號保留 (true/false)(若不支援取號服務，此欄為false)
+  "reserve_time_limit": 3,          // 預設保留時間(分鐘)(called 狀態)(若不支援到號保留，此欄為"")
+  "reserve_time_limit_c": 10,       // 確認保留時間(分鐘)(reserved 狀態)(若不支援"確認保留"，此欄為"")
+  "reset_time": ["04:00", "15:00"], // 重置時間 (若無重置時間, 此欄為"")
+  "support_set_params": {},         // 支援參數設定 ({}詳見備註2)(若不支援任何參數設定，此欄為"")
+  "time_period_items": ["早診", "午診"],  // 時段項目 (若不支援設定時段，此欄為"")
+  "curr_time_period": "午診",             // 目前時段 (若不支援設定時段，此欄為"")
+  "caller_num_limit": 999,          // 叫號機號碼上限(999 或 9999 ...)
+  "num_prefix": ["1", "3", "5"],    // 號碼字首 (若不支援，此欄為"")
+  "prefix_alias": ["A", "B", "C"],  // 字首別名 (若不支援，此欄為"")
+  "scan_qr_code_check": true,       // (true/false) 掃描 QR-Code 時，是否需檢查 sign
+  "total_get_num": 20,              // 取號總數 (若不支援取號服務，此欄為"")
+  "total_call_num": 18,             // 叫號總數 (若不支援取號服務，此欄為"")
+  "item_call_num"：[103, "", 502],  // 各項目當前叫號 (若不支援"分段取號"，此欄為"")
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+002:caller not found                // 叫號機不存在
+005:disconnected from the center    // 與中央 server 斷線 (由叫號機 server 回覆)
+051:wrong password                  // 密碼錯誤
+009:other,<error text>              // 其他
+
+[備註1]
+號碼 object 格式
+{
+  "get_num_item_id": "1",           // 取號項目id
+  "get_from_web": true,             // 網頁取號 (true/false)
+  "for_customer": false,            // 代客取號 (true/false)
+  "state": "waiting",               // 號碼狀態 (waiting/called/reserved/cancelled/removed)
+  "called_time": 1753062809673,     // 到號時間 (Unix timestamp)(尚未到號時，此欄為"")
+  "get_num_time": 1752945195171,    // 取號時間 (Unix timestamp)
+  "turn": 1,                        // 第幾輪取號 (若不支援循環取號，此欄為"")
+                                      (此欄影響排序，輪數小的號碼應靠左顯示)
+}
+[備註2]
+支援參數設定
+{
+  "get_num_max": "15",              // 取號上限 ("0"表示無上限)
+  "hidden": true, (未實作)          // (true/false) 是否隱藏此叫號機，不顯示在 Line 及 訪客網頁
+  "schedule_week": [                // 平常日預約班表(若無資料，此欄為"")
+    [0, 0],                         // 共7天，從星期天開始，每天時段數由 "time_period_items" 決定
+    [1, 1],                         // 1:可預約 0:不可預約
+    [1, 1],
+    [1, 1],
+    [1, 1],
+    [1, 1],
+    [0, 0]
+  ],
+  "schedule_extra": {               // 特殊日預約班表(當天將取代平常日班表)(若無資料，此欄為"")
+    "20251225": [0, 0],             // 日期格式:YYYYMMDD
+    "20260101": [0, 0]
+  },
+  "reserve_time_limit": 3,          // 預設保留時間(分鐘)(called狀態)(若不支援到號保留，此欄為"")
+  "reserve_time_limit_c": 10,       // 確認保留時間(分鐘)(reserved狀態)(若不支援"確認保留"，此欄為"")
+  ==================
+  京都堂管理系統需求
+  ==================
+  "shop_name": "中壢京都堂中醫診所-一診",  // 店家名稱 
+  "callers": {"a010y":""},                 // 店家叫號機名稱 (單一叫號機，caller_name 為空白)
+                                              (若有多部叫號機，格式為 {id1:名稱1, id2:名稱2})
+  "caller_notes": "就診流程提醒：...",     // 叫號須知
+  "password": "YV7X+xUEsMckopbXpp...",     // 登入密碼 (加密型式)  
+  "early_call": 8                          // 提早幾號通知 
+}
+
+注意事項：
+a.若密碼為 "user_get_num"，表示是 "使用者取號網頁"，直接視為登入成功
+b.登入成功後，此 WebSocket 即綁定 caller_id, 只接受此 caller_id 執行指令
+=======================================
+
+6.取號資訊：
+傳送：
+{
+  "action": "get_num_info",         // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+回覆：
+{
+  "action": "get_num_info",         // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+  "caller_name": "可蜜菈臉部彩繪",  // 叫號機名稱
+  "call_num": "16",                 // 目前叫號
+  "prev_num": 15,                   // 上次號碼
+  "change_time": 1766260801088,     // 最後跳號時間
+  "online_status": true,            // 在線狀態
+  "support_get_num": true,          // 支援取號 (true/false)
+  "curr_num": "32",                 // (**將廢除，目前暫時保留**)目前取號
+  "last_get_num": "32",             // 最後取號 (若不支援取號服務，此欄為"")
+  "get_num_switch": "on",           // 取號開關 ("on"/"off") (若不支援取號服務，此欄為"")
+  "get_num_item_type": "人數",      // 取號項目型別 (若不支援"取號項目", 此欄為"")
+  "get_num_item_names": ["1~2人", "3~4人", "5人以上"], // 取號項目名稱 (項目id為 0,1,2)(若不支援"取號項目", 此欄為"")
+  "get_num_item_queue": ["23,25", "22,24", "26,27"],   // 取號項目號碼佇列 (項目id為 0,1,2)(若不支援"取號項目", 此欄為"")(此欄暫時保留，之後將被 get_num_item_data 取代)
+  "get_num_item_data": {"1":{}, "2":{}, "3":{}, "4":{}},  // 取號項目號碼資料 (每個號碼對應一個object，詳見備註1)  (不包含 removed 號碼) (若不支援"取號項目", 此欄為"")
+  "get_num_notes": "",              // 取號需知 (若不顯示取號需知，此欄設為"")(若不支援取號服務，此欄為"")
+  "support_reserve_num": true,      // 支援到號保留 (true/false)(若不支援取號服務，此欄為false)
+  "reserve_time_limit": 3,          // 預設保留時間(分鐘)(called 狀態)(若不支援到號保留，此欄為"")
+  "reserve_time_limit_c": 10,       // 確認保留時間(分鐘)(reserved 狀態)(若不支援"確認保留"，此欄為"")
+  "reset_time": ["04:00", "15:00"], // 重置時間 (若無重置時間, 此欄為"")
+  "support_set_params": {},         // 支援參數設定 ({}詳見備註2)(若不支援任何參數設定，此欄為"")
+  "time_period_items": ["早診", "午診"],  // 時段項目 (若不支援設定時段，此欄為"")
+  "curr_time_period": "午診",             // 目前時段 (若不支援設定時段，此欄為"")
+  "caller_num_limit": 999,          // 叫號機號碼上限(999 或 9999 ...)
+  "num_prefix": ["1", "3", "5"],    // 號碼字首 (若不支援，此欄為"")
+  "prefix_alias": ["A", "B", "C"],  // 字首別名 (若不支援，此欄為"")
+  "scan_qr_code_check": true,       // (true/false) 掃描 QR-Code 時，是否需檢查 sign
+  "total_get_num": 20,              // 取號總數 (若不支援取號服務，此欄為"")
+  "total_call_num": 18,             // 叫號總數 (若不支援取號服務，此欄為"")
+  "item_call_num"：[103, "", 502],  // 各項目當前叫號 (若不支援"分段取號"，此欄為"")
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+002:caller not found                // 叫號機不存在
+004:not logged in                   // 尚未登入 (由叫號機 server 回覆)
+005:disconnected from the center    // 與中央 server 斷線 (由叫號機 server 回覆)
+006:illegal caller_id               // 非登入的 caller_id (由叫號機 server 回覆)
+009:other,<error text>              // 其他
+
+[備註1]
+號碼 object 格式
+{
+  "get_num_item_id": "1",           // 取號項目id
+  "get_from_web": true,             // 網頁取號 (true/false)
+  "for_customer": false,            // 代客取號 (true/false)
+  "state": "waiting",               // 號碼狀態 (waiting/called/reserved/cancelled/removed)
+  "called_time": 1753062809673,     // 到號時間 (Unix timestamp)(尚未到號時，此欄為"")
+  "get_num_time": 1752945195171,    // 取號時間 (Unix timestamp)
+  "turn": 1,                        // 第幾輪取號 (若不支援循環取號，此欄為"")
+                                      (此欄影響排序，輪數小的號碼應靠左顯示)
+}
+[備註2]
+支援參數設定
+{
+  "get_num_max": "15",              // 取號上限 ("0"表示無上限)
+  "hidden": true, (未實作)          // (true/false) 是否隱藏此叫號機，不顯示在 Line 及 訪客網頁
+  "schedule_week": [                // 平常日預約班表(若無資料，此欄為"")
+    [0, 0],                         // 共7天，從星期天開始，每天時段數由 "time_period_items" 決定
+    [1, 1],                         // 1:可預約 0:不可預約
+    [1, 1],
+    [1, 1],
+    [1, 1],
+    [1, 1],
+    [0, 0]
+  ],
+  "schedule_extra": {               // 特殊日預約班表(當天將取代平常日班表)(若無資料，此欄為"")
+    "20251225": [0, 0],             // 日期格式:YYYYMMDD
+    "20260101": [0, 0]
+  },
+  "reserve_time_limit": 3,          // 預設保留時間(分鐘)(called狀態)(若不支援到號保留，此欄為"")
+  "reserve_time_limit_c": 10,       // 確認保留時間(分鐘)(reserved狀態)(若不支援"確認保留"，此欄為"")
+  ==================
+  京都堂管理系統需求
+  ==================
+  "shop_name": "中壢京都堂中醫診所-一診",  // 店家名稱 
+  "callers": {"a010y":""},                 // 店家叫號機名稱 (單一叫號機，caller_name 為空白)
+                                              (若有多部叫號機，格式為 {id1:名稱1, id2:名稱2})
+  "caller_notes": "就診流程提醒：...",     // 叫號須知
+  "password": "YV7X+xUEsMckopbXpp...",     // 登入密碼 (加密型式)  
+  "early_call": 8                          // 提早幾號通知 
+}
+=======================================
+
+**7.同步Line取號：(中央主動傳送)
+中央 sever 傳送
+{
+  "action": "new_get_num",          // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "curr_num": "51",                 // 目前號碼  
+  "get_num_item_id": "1",           // 取號項目id (若不支援"取號項目", 此欄為"")
+  "get_num_time": 1752945195171,    // 取號時間 (Unix timestamp)
+  "turn": 1,                        // 第幾輪取號 (若不支援循環取號，此欄為"")
+  "date": "20260204",               // 日期 (格式:YYYYMMDD)
+  "time_period": "11:00",           // 時段 (例如：早診、午診)(若沒有分時段，此欄為"")
+  "user_info": {"remark": "王小明"} // 使用者資訊 (若無資料，此欄為"")
+}
+
+叫號機 server 回覆：
+{
+  "action": "new_get_num",          // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+009:other,<error text>              // 其他
+
+注意事項：
+a.此指令需同步廣播給此 caller_id 的所有 "店家網頁" 及 "訪客網頁"
+b.當多使用者同時取號，因網路因素，有可能"後"取號者"先"送達網頁前端。
+  所以若發生號碼回溯時，請忽略回溯的號碼，直接使用原來的號碼。
+=======================================
+
+8.取號開關：
+傳送：
+{
+  "action": "get_num_switch",       // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "switch": "on",                   // 取號開關("on"/"off")
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+回覆：
+{
+  "action": "get_num_switch",       // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "switch": "on",                   // 取號開關("on"/"off")
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+002:caller not found                // 叫號機不存在
+003:not support                     // 不支援取號開關功能
+004:not logged in                   // 尚未登入 (由叫號機 server 回覆)
+005:disconnected from the center    // 與中央 server 斷線 (由叫號機 server 回覆)
+006:illegal caller_id               // 非登入的 caller_id (由叫號機 server 回覆)
+009:other,<error text>              // 其他
+
+注意事項：
+a.此指令只支援 "店家網頁" 使用
+b.若回覆封包 result="OK", 需同步廣播給此 caller_id 的所有 "店家網頁" 及 "訪客網頁"
+=======================================
+
+9.網頁使用者取號：
+傳送：
+{
+  "action": "user_get_num",         // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "user_id": "ASD7QEZ3XCT5FG",      // 使用者 id，由取號網頁自行產生
+  "get_num_item_id": "1",           // 取號項目id (若不支援"取號項目", 此欄為"")
+  "for_customer": true,             // 代客取號 (true/false)
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+回覆：
+{
+  "action": "user_get_num",         // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "user_id": "ASD7QEZ3XCT5FG",      // 使用者 id，由取號網頁自行產生
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+  "get_num": "25",                  // 取得號碼 (叫號機 server 需將此號碼同步給 "店家的網頁叫號機") 
+  "get_num_item_id": "1",           // 取號項目id (若不支援"取號項目", 此欄為"")
+  "get_num_time": 1752945195171,    // 取號時間 (Unix timestamp)
+  "turn": 1,                        // 第幾輪取號 (若不支援循環取號，此欄為"")
+  "for_customer": true,             // 代客取號 (true/false)
+  "wait_time_avg": 180,             // 平均等候時間 (以秒為單位)(等候時間 = (取得號碼-叫號機號碼) * wait_time_avg)
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+002:caller not found                // 叫號機不存在
+003:not support                     // 不支援取號功能
+004:not logged in                   // 尚未登入 (由叫號機 server 回覆)
+005:disconnected from the center    // 與中央 server 斷線 (由叫號機 server 回覆)
+006:illegal caller_id               // 非登入的 caller_id (由叫號機 server 回覆)
+091:non-service hours               // 停止取號
+092:max number reached              // 已達取號上限
+009:other,<error text>              // 其他
+
+注意事項：
+若回覆封包 result="OK", 需同步廣播給此 caller_id 的所有 "店家網頁" 及 "訪客網頁"
+=======================================
+
+10.取號服務狀態：
+傳送：
+{
+  "action": "get_num_status",       // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+回覆：
+{
+  "action": "get_num_status",       // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "switch": "on",                   // 取號開關("on"/"off")
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+002:caller not found                // 叫號機不存在
+003:not support                     // 不支援取號開關功能
+004:not logged in                   // 尚未登入 (由叫號機 server 回覆)
+005:disconnected from the center    // 與中央 server 斷線 (由叫號機 server 回覆)
+006:illegal caller_id               // 非登入的 caller_id (由叫號機 server 回覆)
+009:other,<error text>              // 其他
+=======================================
+
+**11.重置叫號機：(中央主動傳送)
+中央 sever 傳送
+{
+  "action": "reset_caller",         // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id (若此欄為"all"，表示重置"全部"叫號機，但排除"excluded"包含的叫號機)
+  "excluded": ["v0005","v0009"]     // 排除的叫號機 (若沒有要排除的叫號機，此欄為"")
+}
+
+叫號機 server 回覆：
+{
+  "action": "reset_caller",         // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id (若此欄為"all"，表示重置"全部"叫號機，但排除"excluded"包含的叫號機)
+  "excluded": ["v0005","v0009"]     // 排除的叫號機 (若沒有要排除的叫號機，此欄為"")
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+009:other,<error text>              // 其他
+
+注意事項：
+若回覆封包 result="OK", 需同步廣播給此 caller_id 的所有 "店家網頁"
+=======================================
+
+**12.取消號碼(Line使用者)：(中央主動傳送)
+中央 sever 傳送
+{
+  "action": "cancel_get_num",       // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "cancel_num": "51",               // 取消的號碼  
+  "date": "20260204",               // 日期 (格式:YYYYMMDD)
+  "time_period": "11:00",           // 時段 (例如：早診、午診)(若沒有分時段，此欄為"")
+}
+
+叫號機 server 回覆：
+{
+  "action": "cancel_get_num",       // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "cancel_num": "51",               // 取消的號碼  
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+009:other,<error text>              // 其他
+
+注意事項：
+a.使用時機調整為 "取消候位" 及 "取消保留" 皆使用此指令
+b.此指令需同步廣播給此 caller_id 的所有 "店家網頁" 及 "訪客網頁"
+=======================================
+
+13.取消取號(取號網頁使用者)：
+傳送：
+{
+  "action": "web_cancel_get_num",   // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "cancel_num": "51",               // 取消的號碼  
+  "user_id": "ASD7QEZ3XCT5FG",      // 使用者 id，由取號網頁自行產生
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+回覆：
+{
+  "action": "web_cancel_get_num",   // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "cancel_num": "51",               // 取消的號碼  
+  "user_id": "ASD7QEZ3XCT5FG",      // 使用者 id，由取號網頁自行產生
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+002:caller not found                // 叫號機不存在
+003:not support                     // 不支援取號功能
+004:not logged in                   // 尚未登入 (由叫號機 server 回覆)
+005:disconnected from the center    // 與中央 server 斷線 (由叫號機 server 回覆)
+006:illegal caller_id               // 非登入的 caller_id (由叫號機 server 回覆)
+009:other,<error text>              // 其他
+
+注意事項：
+若回覆封包 result="OK", 需同步廣播給此 caller_id 的所有 "店家網頁" 及 "訪客網頁"
+=======================================
+
+**14.到號保留：(中央主動傳送)
+中央 sever 傳送
+{
+  "action": "reserve_number",       // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "number": "51",                   // 號碼  
+}
+
+叫號機 server 回覆：
+{
+  "action": "reserve_number",       // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "number": "51",                   // 號碼  
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+009:other,<error text>              // 其他
+=======================================
+
+15.移除號碼：(店家從網頁移除號碼時，使用此指令回報 server)
+傳送：
+{
+  "action": "remove_number",        // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "remove_num": "51",               // 移除的號碼  
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+回覆：
+{
+  "action": "remove_number",        // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "remove_num": "51",               // 移除的號碼  
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+002:caller not found                // 叫號機不存在
+003:not support                     // 不支援取號功能
+004:not logged in                   // 尚未登入 (由叫號機 server 回覆)
+005:disconnected from the center    // 與中央 server 斷線 (由叫號機 server 回覆)
+006:illegal caller_id               // 非登入的 caller_id (由叫號機 server 回覆)
+009:other,<error text>              // 其他
+
+注意事項：
+a.此指令只支援 "店家網頁" 使用
+b.若回覆封包 result="OK", 需同步廣播給此 caller_id 的所有 "店家網頁" 及 "訪客網頁"
+=======================================
+
+16.參數設定：
+傳送：
+{
+  "action": "set_params",           // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "params": {},                     // 參數項目 ({}內容詳見備註1) (只需傳送有變動的參數)
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+回覆：
+{
+  "action": "set_params",           // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "params": {},                     // 參數項目 ({}內容詳見備註1) (只回傳設定成功的參數)
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+002:caller not found                // 叫號機不存在
+003:not support                     // 不支援參數設定功能
+004:not logged in                   // 尚未登入 (由叫號機 server 回覆)
+005:disconnected from the center    // 與中央 server 斷線 (由叫號機 server 回覆)
+006:illegal caller_id               // 非登入的 caller_id (由叫號機 server 回覆)
+161:param not support (參數名稱)    // 參數不支援設定
+162:param format error (參數名稱)   // 參數格式錯誤
+163:failed to set params            // 參數設定失敗
+164:failed to set some params       // 部分參數設定失敗 (只回傳設定成功的參數)
+009:other,<error text>              // 其他
+
+[備註1]
+參數項目格式
+{
+  "get_num_max": "15",              // 取號上限 ("0"表示無上限)
+  "hidden": true,  (未實作)         // (true/false) 是否隱藏此叫號機，不顯示在 Line 及 訪客網頁
+  "schedule_week": [                // 平常日預約班表(若無資料，此欄為"")
+    [0, 0],                         // 共7天，從星期天開始，每天時段數由 "time_period_items" 決定
+    [1, 1],                         // 1:可預約 0:不可預約
+    [1, 1],
+    [1, 1],
+    [1, 1],
+    [1, 1],
+    [0, 0]
+  ],
+  "schedule_extra": {               // 特殊日預約班表(當天將取代平常日班表)(若無資料，此欄為"")
+    "20251225": [0, 0],             // 日期格式:YYYYMMDD
+    "20260101": [0, 0]
+  }
+}
+
+注意事項：
+a.此指令只支援 "店家網頁" 使用
+b.若回覆封包 result="OK", 需同步廣播給此 caller_id 的所有 "店家網頁" 及 "訪客網頁"
+=======================================
+
+17.設定時段：
+傳送：
+{
+  "action": "set_time_period",      // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "time_period": "早診",            // 時段 (可設定的時段項目請見 login 或 get_num_info 的 time_period_items)
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+回覆：
+{
+  "action": "set_time_period",      // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "time_period": "早診",            // 時段項目(例如：早診、午診)
+                                       (可設定的項目請見 login 或 get_num_info 的 time_period_items)
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+002:caller not found                // 叫號機不存在
+003:not support                     // 不支援設定時段
+004:not logged in                   // 尚未登入 (由叫號機 server 回覆)
+005:disconnected from the center    // 與中央 server 斷線 (由叫號機 server 回覆)
+006:illegal caller_id               // 非登入的 caller_id (由叫號機 server 回覆)
+009:other,<error text>              // 其他
+
+注意事項：
+a.此指令只支援 "店家網頁" 使用
+b.若回覆封包 result="OK", 需同步廣播給此 caller_id 的所有 "店家網頁" 及 "訪客網頁"
+=======================================
+
+18.查詢預約記錄：
+傳送：
+{
+  "action": "booking_data",         // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+回覆：
+{
+  "action": "booking_data",         // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "booking_data": {"日期1;;時段1":[], "日期1;;時段2":[], "日期2;;時段1":[]...}, // 預約記錄 (格式詳見備註1)
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+002:caller not found                // 叫號機不存在
+004:not logged in                   // 尚未登入 (由叫號機 server 回覆)
+005:disconnected from the center    // 與中央 server 斷線 (由叫號機 server 回覆)
+006:illegal caller_id               // 非登入的 caller_id (由叫號機 server 回覆)
+009:other,<error text>              // 其他
+
+[備註1]
+預約記錄格式
+{
+  "20250107;;11:00": [              // 日期及時段 (格式 YYYYYMMDD[;;<時段>]) (若不支援時段，則只有日期)
+    {
+      "number": 1,                  // 號碼
+      "get_num_item_id": "",        // 取號項目id (名稱可由 get_num_item_names 取得) (若不支援，此欄為"")
+      "user_info": {"remark": "王小明"},  // 使用者資訊 (若無資料，此欄為"")
+      "state": "canceled",          // 號碼狀態 (waiting/called/reserved/cancelled/removed)
+    },
+    {
+      "number": 2,
+      "get_num_item_id": "",
+      "user_info": {"remark": "蔡小英"},
+      "state": "waiting"
+    }
+  ],
+  "20250107;;19:00": [
+  ],
+  "20250108;;11:00": [
+  ]
+}
+
+注意事項：
+此指令只支援 "店家網頁" 使用
+=======================================
+
+19.店家重置叫號機：
+傳送：
+{
+  "action": "web_reset_caller",     // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+回覆：
+{
+  "action": "web_reset_caller",     // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "caller_id": "v0001",             // 叫號機 id
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+002:caller not found                // 叫號機不存在
+004:not logged in                   // 尚未登入 (由叫號機 server 回覆)
+005:disconnected from the center    // 與中央 server 斷線 (由叫號機 server 回覆)
+006:illegal caller_id               // 非登入的 caller_id (由叫號機 server 回覆)
+009:other,<error text>              // 其他
+
+注意事項：
+a.此指令只支援 "店家網頁" 使用
+b.回覆 result:"OK"，表示已開始進行重置，並非重置完成。
+c.當收到 "11.重置叫號機" 的回覆封包，才表示叫號機重置完成。
+d.因為重置完成後，中央還需清除取號及通知資料，所以需請店家稍候再使用。
+=======================================
+
+20.群組登入：
+傳送：
+{
+  "action": "group_login",          // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "group_id": "kyoto",              // 群組 id
+  "password": "YV7X+xUEsMckopbXpp5sey+eosV8HYIGxa/fOS69/SU=", // 群組密碼 (需是加密型式，先進行 sha256, 再轉成 base64)
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+回覆：
+{
+  "action": "group_login",          // 動作指令
+  "vendor_id": "tawe",              // 叫號機廠商 id
+  "group_id": "kyoto",              // 群組 id
+  "caller_list": {"a010y":{}, "a011s":{}},  // 叫號機列表 (每個 id 對應一個object，詳見備註1)
+  "result": "OK",                   // 動作結果 ("OK"/"Fail, <error code>:<error text>")
+  "uuid": "8c4530b1-8747-4b19-8da7-3f853f8712f3", // 封包識別碼
+  "ws_id": "0x7fbcd41c3f50",        // WebSocket ID (由 caller server 填入)
+}
+
+Fail 錯誤碼：
+001:format error                    // 格式錯誤
+005:disconnected from the center    // 與中央 server 斷線 (由叫號機 server 回覆)
+201:group not found                 // 群組不存在
+202:wrong password                  // 密碼錯誤
+009:other,<error text>              // 其他
+
+[備註1]
+caller object 格式
+{
+  "shop_name": "中壢京都堂中醫診所-一診",  // 店家名稱
+  "caller_name": "",                       // (此欄暫不實作) 叫號機名稱
+  "password": "YV7X+xUEsMckopbXpp5sey+eosV8HYIGxa/fOS69/SU="  // 登入密碼 (加密型式)
+}
+
+注意事項：
+a.此指令可在 "login" 前執行。
+b.此指令只用於取得 "叫號機列表", 不會視為已登入，無法繼續執行其他指令。
+=======================================
+
+
+[change log (2025/12/31以前)]
+1.0 --建立文件
+2.0 --新增封包識別碼 uuid 
+2.1 --"5.登入驗証" 及 "6.取號資訊" 新增回覆欄位 vendor_id, caller_id
+2.2 --新增"8.取號開關"、"9.使用者取號" 及 "10. 取號服務狀態"
+    --"2.叫號回傳" 修改回覆格式，使用 json 並新增 "uuid 及 ""wait_time_avg" 欄位
+    --"1.連線方式" 新增 "注意事項"
+    --"5.登入驗証" 新增 "注意事項"
+2.3 --"5.登入驗証" 新增回覆欄位 "support_get_num"(支援取號)、"last_get_num"(最後取號)、"get_num_switch"(取號開關)
+    --"5.登入驗証" 錯誤碼 003:wrong password 變更為 051
+    --"9.使用者取號" 錯誤碼 004:non-service hours 變更為 091
+2.4 [2025/05/29]
+  --"5.登入驗証" 及 "6.取號資訊" 新增回覆欄位 
+      "get_num_item_type"(取號項目型別)
+      "get_num_item_names"(取號項目名稱)
+      "get_num_item_queue"(取號項目號碼佇列)
+  --"7.同步最新取號" 新增 "注意事項"
+  --"7.同步最新取號" 新增 "get_num_item_id" 欄位
+  --"9.使用者取號" 新增錯誤碼 092:max number reached (已達取號上限)
+  --"9.使用者取號" 新增 "get_num_item_id" 欄位, 回覆亦新增此欄位
+  --"6.取號資訊"、"8.取號開關"、"9.使用者取號" 及 "10. 取號服務狀態" 新增錯誤碼 004:not logged in
+2.5 [2025/06/11]
+  --"5.登入驗証" 及 "6.取號資訊" 新增回覆欄位 
+      "get_num_item_waiting"(取號項目等待總數)
+  --"6.取號資訊" 新增回覆欄位
+      "call_num"(叫號機號碼)
+  --新增"11.重置叫號機"
+2.6 [2025/06/30]
+  --"5.登入驗証" 及 "6.取號資訊" 移除回覆欄位
+      "get_num_item_waiting"(取號項目等待總數)(網頁自行計算)
+  --"5.登入驗証" 及 "6.取號資訊" 新增回覆欄位 
+      "get_num_notes"(取號須知)
+      "support_reserve_num"(支援到號保留)
+      "reserve_time_limit"(到號保留期限)
+      "reset_time"(重置時間)
+  --新增"12.取消取號(Line使用者)"
+  --新增"13.取消取號(網頁使用者)"
+  --新增"14.到號保留"
+2.6.1 [2025/07/10]
+  --"5.登入驗証" 及 "6.取號資訊" 新增回覆欄位
+      "get_num_item_data"(取號項目號碼資料)(用來取代 get_num_item_queue)
+  --"9.使用者取號" 新增欄位 "for_customer"(代客取號)
+2.6.2 [2025/07/21]
+  --"5.登入驗証" 及 "6.取號資訊" [備註1 號碼object格式] 新增欄位
+      "state"(號碼狀態)
+      "called_time"(到號時間)
+  --"12.取消取號" 改名為 "12.取消號碼"
+  --"12.取消號碼" 新增注意事項 - 使用時機調整為 "取消候位" 及 "取消保留" 皆使用此指令
+  --"14.到號保留" 新增注意事項 - 此指令將廢除，"取消保留" 的功能改由 "12.取消號碼" 執行
+  --新增"15.移除號碼" (店家從網頁點掉號碼時，使用此指令回報 server)
+2.6.3 [2025/07/31]
+  --"7.同步最新取號" 改名為 "7.同步Line取號" (只作正名，封包內容不變)
+  --"9.使用者取號" 改名為 "9.網頁使用者取號" (只作正名，封包內容不變)
+  --"9.網頁使用者取號" 新增回覆欄位
+      "user_id"(使用者 id)
+  --"15.移除號碼" 新增注意事項：2."移除號碼" 的回覆需同步廣播給此 caller_id 的所有 "店家網頁"
+2.6.4 [2025/08/13]
+  --"5.登入驗証" 及 "6.取號資訊" 新增回覆欄位 
+      "support_set_params"(支援參數設定)
+  --新增"16.參數設定"
+  --"5.登入驗証" 及 "6.取號資訊" 欄位 get_num_item_data 新增說明 (將不再包含 removed 號碼)
+    (未來若有需要讀取 removed 號碼，再另增指令)
+2.6.5 [2025/09/22]
+  --"5.登入驗証" 及 "6.取號資訊" 新增回覆欄位 
+      "time_period_items" (時段項目)
+  --"5.登入驗証" 及 "6.取號資訊" 新增回覆欄位 
+      "curr_time_period" (目前時段)
+  --新增"17.設定時段"
+2.6.6 [2025/10/08]
+  --已實作"參數設定"相關內容，包括 "5.登入驗証"、"6.取號資訊"、"16.參數設定"
+  --"16.參數設定" 回覆參數修改註解
+    "params" (只回傳設定成功的參數)
+  --"16.參數設定" 修改錯誤碼 161~164 如下：
+    161:param not support (參數名稱)    // 參數不支援設定
+    162:param format error (參數名稱)   // 參數格式錯誤
+    163:failed to set params            // 參數設定失敗
+    164:failed to set some params       // 部分參數設定失敗 (只回傳設定成功的參數)
+2.6.7 [2025/12/14]
+  --"5.登入驗証" 及 "6.取號資訊" 備註1 新增欄位
+    "turn" (第幾輪取號)
+2.6.8 [2025/12/15]
+  --"7.同步Line取號" 新增傳送欄位
+    "turn" (第幾輪取號)
+  --"9.網頁使用者取號" 新增回覆欄位
+    "turn" (第幾輪取號)
+2.6.9 [2025/12/17]
+  --"5.登入驗証" 及 "6.取號資訊" "備註1:號碼 object 格式" 新增欄位
+    "get_num_time" (取號時間)
+  --"7.同步Line取號" 新增傳送欄位
+    "get_num_time" (取號時間)
+  --"9.網頁使用者取號" 新增回覆欄位
+    "get_num_time" (取號時間)
+2.7.0 [2025/12/19]
+  --"5.登入驗証" 及 "6.取號資訊" "備註2:支援參數設定" 新增欄位
+    "week_schedule" (平常日預約班表)
+    "extra_schedule" (特殊日預約班表)
+  --"16.參數設定 "備註2:參數項目格式" 新增欄位
+    "week_schedule" (平常日預約班表)
+    "extra_schedule" (特殊日預約班表)
+2.7.1 [2025/12/24]
+  --"2.叫號回傳" 新增傳送欄位
+    "action" (動作指令)
+    "counter_name" (櫃檯名稱)
+    "counter_num" (櫃檯號碼)
+  --"2.叫號回傳" 新增回覆欄位
+    "action" (動作指令)
+2.7.2 [2025/12/31]
+  --"5.登入驗証" 及 "6.取號資訊"
+    [新增回覆欄位]
+    "caller_num_limit" (叫號機號碼上限)
+    "num_alias_prefix" (號碼別名字首)
+    ["備註2:支援參數設定" 修改欄位名稱及說明]
+    "week_schedule" ==> "schedule_week" (資料從星期天開始)
+    "extra_schedule" ==> "schedule_extra"
+  --"16.參數設定"
+    ["備註2:參數項目格式" 修改欄位名稱及說明]
+    "week_schedule" ==> "schedule_week" (資料從星期天開始)
+    "extra_schedule" ==> "schedule_extra"
+  --新增"18.查詢預約記錄"
