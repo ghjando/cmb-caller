@@ -522,7 +522,7 @@ class QueueSwitchController:
                 f"倒數: {time_left_str}   \r"
             )
         else:
-            display_text = f"\r現在時間: {now_str} | 今日無更多排程                                       \r"
+            display_text = f"\r現在時間: {now_str} | 今日無更多排程   \r"
 
         sys.stdout.write(display_text)
         sys.stdout.flush()
