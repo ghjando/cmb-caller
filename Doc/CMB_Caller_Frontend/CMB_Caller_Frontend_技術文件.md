@@ -45,7 +45,7 @@
 │         │                                                                   │
 │         ▼                                                                   │
 │  ┌─────────────────────────────────────────────────────────────┐              │
-│  │                  業務邏輯處理                                      │              │
+│  │                  簡單業務邏輯處理                            │              │
 │  │  • 登入驗證 (auth)                                           │              │
 │  │  • 資料同步 (sync)                                            │              │
 │  │  • 轉發訊息到 Main Server                                     │              │
@@ -69,10 +69,10 @@
                                                  │
                                                  │ 訊息轉發
                                                  ▼
-                                          ┌─────────────────┐
-                                          │   LINE Bot      │
-                                          │   (通知服務)    │
-                                          └─────────────────┘
+                                      ┌───────────────────────┐
+                                      │   LINE Messaging API  │
+                                      │      (錯誤通知)       │
+                                      └───────────────────────┘
 ```
 					  
 
@@ -80,11 +80,11 @@
 
 | 元件 | 角色 |
 |------|------|
-| **Caller（ESP32）   | 叫號硬體，顯示號碼、接收叫號、處理業務邏輯 |
+| **Caller（ESP32）   | 叫號硬體，顯示號碼、接收叫號、處理 caller 的連線 |
 | **Frontend Server   | WebSocket 代理 + 簡單業務邏輯（登入驗證、資料同步、資料廣播）|
 | **CMB Main Server   | 叫號系統後端中央伺服器（負責真正的業務邏輯）|
 | **GCP Pub/Sub       | 跨實例協調（新實例廣播 STOP_SERVER，舊實例主動讓出服務）|
-| **LINE Bot          | 錯誤/事件通知 |
+| **LINE Messaging API| 錯誤/事件通知 |
 | **網頁前端（Browser）| 店家/管理員操作介面，WebSocket 客戶端 |
 
 ### 1.3 連線架構（clients 資料結構）
@@ -95,9 +95,9 @@ clients = {
         "caller_num": 123,           # 目前的叫號
         "caller_name": "店名",        # 店家名稱
         "connections": {
-            ws1: { "ws_type": "caller" },   # Caller 硬體
-            ws2: { "ws_type": "web" },       # 網頁操作者
-            ws3: { "ws_type": "visitor" }   # 顧客/訪客
+            ws1: { "ws_type": 1 },   # Caller 硬體
+            ws2: { "ws_type": 2 },       # 網頁操作者
+            ws3: { "ws_type": 4 }   # 顧客/訪客
         },
         "login_time": datetime,
         "disconnect_time": None
@@ -126,7 +126,7 @@ clients = {
 | WebSocket    | -       | 即時通訊      |
 | uvicorn      | -       | ASGI 伺服器   |
 | Google Cloud | Pub/Sub | 跨實例通訊    |
-| LINE Bot API | -       | LINE 通知     |
+| LINE Messaging API | -       | LINE 通知     |
 | psutil       | -       | 系統監控      |
 
 
@@ -345,15 +345,15 @@ v0001,send,123
 Caller            Caller Frontend         CMB Main Server
   │                     │                      │
   │───── auth ─────────►│                      │
-  │                     │───── auth ──────────►│  是 web caller 才送至 Main Server
+  │                     │───── auth ──────────►│  如果是 web caller 才送至 Main Server
   │                     │◄──── OK ─────────────│
   │◄──── OK ────────────│                      │
   │                     │                      │
-  │───── info ─────────►│                      │  實體 Caller 才有傳
+  │───── info ─────────►│                      │  實體 Caller 會傳
   │◄──── OK ────────────│                      │
   │                     │                      │  
-  │◄─ wifi_get_status ──│                      │  Frontend 收到 info 主動發出詢問
-  │── wifi_get_status ─►│                      │  Frontend 會廣播至 web caller
+  │◄─ wifi_get_status ──│                      │  Frontend 收到 info 後主動發出詢問
+  │─wifi_get_status,OK─►│                      │  Frontend 要廣播至 web caller
   │                     │                      │
   │───── get ──────────►│                      │
   │                     │───── get_num_info ──►│
@@ -463,7 +463,7 @@ class ConnectionMonitor:
 
 ## 7. LINE 通知
 
-### 7.1 LINE Bot 設定
+### 7.1 LINE Messaging API 設定
 
 ```
 class LineNotifier:
