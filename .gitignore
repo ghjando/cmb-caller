@@ -206,9 +206,10 @@ cython_debug/
 
 
 Src/*
+!Src/cmb_caller_HW3/
 !Src/cmb-caller/
 !Src/cmb-caller-frontend/
-!Src/cmb_caller_HW3/
+!Src/cmb-tools/
 
 *.bat
 

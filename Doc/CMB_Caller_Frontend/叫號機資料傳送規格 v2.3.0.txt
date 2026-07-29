@@ -1,0 +1,463 @@
+叫號機資料傳送規格 v2.3.0
+(2026/03/16)
+
+本文件適用於叫號機系統的 WebSocket 通訊協議與 WiFi 設定規範.
+
+
+
+修改記錄:
+==========================
+1.0  	-- 初始版本.
+1.1  	-- 修改send、get 命令回傳格式.
+1.2  	-- 增加 update 命令.
+1.3  	-- 增加 get_num_info、info 命令.
+1.4  	-- 增加 new_get_num 命令.
+1.5  	-- auth 命令 增加 "user_get_num" 登入, 增加 wait_time_avg、new_get_num、get_num_switch及user_get_num 命令.
+1.6  	-- get_num_switch 增加主動通知, user_get_num 增加 "user_id" 欄位, 增加 get_num_status 命令.
+1.6.1	-- user_get_num 伺服器會主動推送通知給所有相同 caller_id 的店家.
+2.0	-- 增加 WiFi 設定相關指令.
+2.1	-- 2.8 改為 2.7, 2.9 改為 2.8, 2.10 改為 2.9. (編號與caller server規格相對應), 2.7 改為 2.30.
+        -- 2.1 登入驗証 (login) 新增 Json 格式.
+	-- 2.2 傳送叫號號碼 (send) 新增 Json 格式.
+   	-- 2.6 取號資訊 (get_num_info) 新增 Json 格式.
+	-- 2.7 同步最新取號:(new_get_num) 改為Json格式.
+        -- 2.9 使用者取號(user_get_num) 新增錯誤碼及欄位.
+2.1.1	-- 2.9 使用者取號" 新增 "get_num_item_id" 欄位, 回覆亦新增此欄位
+  	-- 2.1 get_num_item_names 型別改成 array
+  	-- 2.6 get_num_item_queue 型別改成 array
+  	-- 2.6 取號資訊"、2.8.取號開關"、2.9.使用者取號" 及 2.10. 取號服務狀態" 新增錯誤碼 004:not logged in
+2.3.0	-- JSON 通訊協定以 caller server 通訊協定 v2.7.8 及以上為主，本文件僅記載差異處{WiFi 設定協定、CSV 格式指令(對下相容使用，新開發程式請避免使用）}.
+
+
+1. 連線規格
+====================
+
+WebSocket 連接資訊:
+  - 正式環境(Live) : wss://cmb-caller-frontend-410240967190.asia-east1.run.app/
+  - 測試環境(Trial): wss://cmb-caller-frontend-306511771181.asia-east1.run.app/
+
+連線設定:
+  - 編碼: UTF-8
+  - 通訊協定: WebSocket over TLS (wss)
+  - 心跳間隔: 建議每 60 秒發送 ping 指令
+
+
+
+2. 通訊協議
+====================
+
+JSON 格式通訊協定請參照《caller server 通訊協定 v2.7.8》。
+
+以下僅列出叫號機端專用的 CSV 格式指令（caller server 規格中無對應內容）。
+
+CSV格式 [統一格式說明]:
+  - 所有請求格式: {CallerID},CMD,{參數}
+  - 所有成功回應: OK,{CallerID},{資料},{CMD}
+  - 所有錯誤回應: Fail,{錯誤代碼},{錯誤描述},{CMD}
+
+資料格式規範: 所有欄位以逗號分隔（CSV），且不得包含空格。
+
+
+2.1 登入驗証 (CSV格式)
+---------------------------
+請求格式:
+  {CallerID},auth,{加密密碼}
+
+欄位說明:
+  - CallerID: 叫號機唯一識別碼，五位小寫英數字 (格式: [a-z0-9]{5}, 例: v0001)
+  - CMD: 固定值 "auth"
+  - 加密密碼:
+	1. 原始密碼經 SHA-256 雜湊後，再以 Base64 編碼
+	2. 客戶取號使用明碼 "user_get_num",限定權限,user_get_num(Server 不主動通知)、get_num_switch(僅接收),且無 send、new_get_num 功能.
+
+回應格式:
+  OK,{CallerID},{店家資訊},auth
+
+欄位說明:
+  - 結果: "OK" = 成功, "Fail" = 失敗
+  - CallerID: 叫號機唯一識別碼
+  - 店家資訊: 驗證成功時返回
+    (格式: "店家名稱" 或 "店家名稱;;叫號機說明")
+  - CMD: 固定值 "auth"
+
+範例:
+  請求: v0001,auth,YV7X+xUEsMckopbXpp....
+  回應: OK,v0001,可蜜菈臉部彩繪,auth
+  回應: OK,v0001,可蜜菈臉部彩繪;;櫃台1,auth
+=========================================================================================
+
+
+2.2 傳送叫號號碼 (CSV格式)
+---------------------------
+請求格式:
+  {CallerID},send,{號碼}
+
+欄位說明:
+  - CallerID: 叫號機唯一識別碼
+  - CMD: 固定值 "send"
+  - 號碼: 要顯示的號碼（純數字，最大長度 3 位）
+
+回應格式:
+  OK,{CallerID},{號碼},send
+
+欄位說明:
+  - 結果: "OK" = 成功, "Fail" = 失敗
+  - CallerID: 叫號機唯一識別碼
+  - 號碼: 要顯示的號碼
+  - CMD: 固定值 "send"
+
+範例:
+  請求: v0001,send,123
+  回應: OK,v0001,123,send
+=========================================================================================
+
+
+2.3 獲取當前叫號號碼 (CSV格式)
+---------------------------
+請求格式:
+  {CallerID},get
+
+欄位說明:
+  - CallerID: 叫號機唯一識別碼
+  - CMD: 固定值 "get"
+
+回應格式:
+  OK,{CallerID},{當前號碼},get
+
+欄位說明:
+  - 結果: "OK" = 成功, "Fail" = 失敗
+  - CallerID: 叫號機唯一識別碼
+  - 當前號碼: 該叫號機目前的叫號
+  - CMD: 固定值 "get"
+
+範例:
+  請求: v0001,get
+  回應: OK,v0001,123,get
+=========================================================================================
+
+
+2.4 連線檢測 (CSV格式)
+-------------------------
+請求格式:
+  {CallerID},ping
+
+欄位說明:
+  - CallerID: 叫號機唯一識別碼
+  - CMD: 固定值 "ping"
+
+回應格式:
+  pong
+
+欄位說明:
+  - 結果: pong (固定回應內容)
+
+建議發送頻率:
+  - 每 30 至 60 秒發送一次
+
+範例:
+  請求: v0001,ping
+  回應: pong
+=========================================================================================
+
+
+2.5 叫號資料主動更新 (CSV格式)
+-----------------------------------------
+請求格式:
+  （由伺服器主動發送，無需請求）
+
+說明:
+  - 由伺服器主動推送
+  - 用於通知叫號資料已更新
+  - 接收端需能處理 'update' 指令
+
+回應格式:
+  OK,{CallerID},{更新內容},update
+
+欄位說明:
+  - OK: 固定值
+  - CallerID: 叫號機唯一識別碼
+  - 更新內容: 最新的號碼資訊
+  - CMD: 固定值 "update"
+
+範例:
+  回應: OK,v0001,124,update
+=========================================================================================
+
+
+2.6 取號資訊 (CSV格式)
+----------------------------------------
+請求格式:
+  {CallerID},get_num_info
+
+欄位說明:
+  - CallerID: 叫號機唯一識別碼
+  - CMD: 固定值 "get_num_info"
+
+回應格式:
+  OK,{CallerID},{目前號碼},{等待人數},get_num_info
+
+欄位說明:
+  - 結果: "OK" = 成功, "Fail" = 失敗
+  - CallerID: 叫號機唯一識別碼
+  - 目前號碼: 目前最後發出的號碼
+  - 等待人數: 尚需等待的人數 (當時資訊，不會另行更新)
+  - CMD: 固定值 "get_num_info"
+
+範例:
+  請求: v0001,get_num_info
+  回應: OK,v0001,134,10,get_num_info
+=========================================================================================
+
+
+2.30 發送資訊 (CSV格式)
+----------------------------------------
+請求格式:
+  {CallerID},info,{傳送資訊}
+
+欄位說明:
+  - CallerID: 叫號機唯一識別碼
+  - CMD: 固定值 "info"
+  - 傳送資訊: 傳送訊息內容，例如版本資訊，僅供開發除錯參考使用。(最大長度 256 字元)
+
+回應格式:
+  OK,{CallerID},info
+
+欄位說明:
+  - 結果: "OK" = 成功, "Fail" = 失敗
+  - CallerID: 叫號機唯一識別碼
+  - CMD: 固定值 "info"
+
+範例:
+  請求: v0001,info,CMB_V.1.0_20250416
+  回應: OK,v0001,info
+=========================================================================================
+
+
+
+3. Caller 系統 WiFi 設定通訊協定設計
+=========================================
+
+基本結構
+所有請求訊息結構:
+json
+{
+  "action": "動作指令",			// 必填，固定值
+  "caller_id": "a0001",			// 必填，叫號機 ID
+  "uuid": "8c4530b1...",		// 選填，請求識別碼
+  "data": {}  				// 選擇性，特定動作需要的資料
+}
+
+所有回應訊息結構:
+json
+{
+  "action": "動作指令",			// 固定值
+  "caller_id": "a0001",			// 叫號機 ID
+  "uuid": "8c4530b1...",		// 請求識別碼
+  "result": "OK或錯誤代碼",		// OK|Fail,<e>
+  "data": {}  				// 選擇性，回應資料
+}
+=========================================================================================
+
+
+3.1 要求上傳 Caller 狀態 (wifi_get_status request)
+---------------------------------------------------
+
+請求 (前端介面 → Caller):
+json
+{
+  "action": "wifi_get_status",
+  "caller_id": "a0001",
+  "uuid": "8c4530b1..."
+}
+
+說明:
+  初始連線檢查
+  - 前端介面在登入系統後，應首先發送 "wifi_get_status" 命令。
+  - 若收到回應為 "result": "OK"，表示 Caller 已連線，可繼續執行後續操作。
+  - 若收到 "Fail, 002:device not found"，表示 Caller 尚未連線，前端應等待 Caller 主動回傳 "wifi_get_status" 資料後再繼續。
+
+回應 (Caller → 前端介面):
+json
+{
+  "action": "wifi_get_status",
+  "caller_id": "a0001",
+  "uuid": "8c4530b1...",
+  "result": "OK",
+  "data": {
+    "wifi_connected": true,  		// WiFi連線狀態
+    "current_ssid": "Home-WiFi",  	// 目前連線的SSID
+    "ip_address": "192.168.1.105",  	// IP位址
+    "rssi": -65,  			// 信號強度
+  }
+}
+
+說明:
+  Caller 狀態回報機制
+  - Caller 在成功連線後，會主動向每個前端介面發送 "wifi_get_status" 資料，提供目前連線狀態、SSID、IP、RSSI 等資訊。
+=========================================================================================
+
+
+3.2 要求上傳 WiFi 掃描結果 (wifi_scan_list request)
+---------------------------------------------------
+請求 (前端介面 → Caller):
+json
+{
+  "action": "wifi_scan_list",
+  "caller_id": "a0001",
+  "uuid": "8c4530b1-8747-4b19...."
+}
+
+回應 (Caller → 前端介面):
+json
+{
+  "action": "wifi_scan_list",
+  "caller_id": "a0001",
+  "uuid": "8c4530b1-8747-4b19....",
+  "result": "OK",
+  "data": {
+    "networks": [
+      {
+        "ssid": "Home-WiFi",		// SSID
+        "bssid": "AA:BB:CC:DD:EE:FF",	// MAC 位址
+        "rssi": -65,			// 信號強度
+        "channel": 6			// 信號頻道
+	"encryption": "WPA2"		// 要密碼
+      },
+      {
+        "ssid": "Office-Network",
+        "bssid": "11:22:33:44:55:66",
+        "rssi": -72,
+        "channel": 11
+	"encryption": "Open"		// 無須密碼
+      }
+    ]
+  }
+}
+
+說明:
+  "encryption":
+  - "Open" "WEP" "WPA" "WPA2" "WPA/WPA2" "WPA2 Enterprise"
+  只有 "Open" 加密方式表示無須密碼，其餘均需要密碼才能連接
+  前端介面可根據 encryption 欄位決定是否顯示密碼輸入欄位
+=========================================================================================
+
+
+3.3 要求上傳已儲存的 WiFi 帳號與密碼 (wifi_get_profiles request)
+--------------------------------------------------------------------
+請求 (前端介面 → Caller):
+json
+{
+  "action": "wifi_get_profiles",
+  "caller_id": "a0001",
+  "uuid": "8c4530b1-8747-4b19...."
+}
+
+回應 (Caller → 前端介面):
+json
+{
+  "action": "wifi_get_profiles",
+  "caller_id": "a0001",
+  "uuid": "8c4530b1-8747-4b19....",
+  "result": "OK",
+  "data": {
+    "credentials": [
+      {
+        "ssid": "Home-WiFi",		// SSID
+        "password": "123456",		// 密碼
+        "priority": 1			// 優先序
+      },
+      {
+        "ssid": "Office-Network",
+        "password": "123456",
+        "priority": 2
+      }
+    ]
+  }
+}
+=========================================================================================
+
+
+3.4 傳送新的 WiFi 帳號與密碼 (wifi_add_profile request)
+---------------------------------------------------------
+請求 (前端介面 → Caller):
+json
+{
+  "action": "wifi_add_profile",
+  "caller_id": "a0001",
+  "uuid": "8c4530b1-8747-4b19....",
+  "data": {
+    "ssid": "New-WiFi-Network",		// SSID
+    "password": "password_123",		// 密碼
+  }
+}
+
+說明:
+  新增 WiFi 設定
+  - 前端介面發送 "wifi_add_profile request" 命令後，若收到 "result": "OK":
+    - Caller 將中斷目前連線，嘗試連接至新設定的 WiFi。
+    - 若連線失敗，Caller 將依照已儲存的 WiFi 優先順序逐一嘗試連線。
+    - 成功連線後，Caller 會再次主動發送 "wifi_get_status"。
+    - 經由讀取 "wifi_get_status" -> "data" -> "current_ssid" 資料可判斷新加入熱點是否連線成功.
+
+回應 (Caller → 前端介面):
+json
+{
+  "action": "wifi_add_profile",
+  "caller_id": "a0001",
+  "uuid": "8c4530b1-8747-4b19....",
+  "result": "OK"
+}
+=========================================================================================
+
+
+3.5 刪除已儲存的 WiFi SSID (wifi_delete_profile request)
+------------------------------------------------------------
+請求 (前端介面 → Caller):
+json
+{
+  "action": "wifi_delete_profile",
+  "caller_id": "a0001",
+  "uuid": "8c4530b1-8747-4b19....",
+  "data": {
+    "ssid": "Office-Network"
+  }
+}
+
+說明:
+  刪除已儲存的 WiFi 設定
+  - 前端介面發送 "wifi_delete_profile request" 命令後，若收到 "result": "OK":
+    - Caller 將中斷目前連線，依照已儲存的 WiFi 優先順序逐一嘗試連線。
+    - 成功連線後，Caller 會再次主動發送 "wifi_get_status"。
+
+回應 (Caller → 前端介面):
+json
+{
+  "action": "wifi_delete_profile",
+  "caller_id": "a0001",
+  "uuid": "8c4530b1-8747-4b19....",
+  "result": "OK"
+}
+=========================================================================================
+
+
+錯誤代碼定義 (WiFi 設定)
+------------------------------------------------------------
+當操作失敗時，回應訊息的 result 欄位會包含錯誤代碼和描述:
+
+json
+{
+  "action": "wifi_add_profile",
+  "caller_id": "a0001",
+  "uuid": "8c4530b1-8747-4b19....",
+  "result": "Fail, 005:invalid ssid"
+}
+
+錯誤代碼列表:
+   001:format error          - 訊息格式錯誤
+   002:device not found      - 裝置不存在或無法連接
+   003:not supported         - 不支援此功能
+   005:invalid SSID          - 無效的 SSID（空白或格式錯誤）
+   006:invalid password      - 密碼不符合要求（長度不足或超過限制）
+   007:connection failed     - 網路連線失敗
+   008:credential not found  - 找不到指定的 WiFi SSID
+   009:other,<error text>    - 其他錯誤，會提供具體描述

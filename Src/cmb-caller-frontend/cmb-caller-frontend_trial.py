@@ -521,13 +521,14 @@ class LineNotifier:
         self.settings = {
             "event_1": {
                 "recipients": [
-                    {"id": "U0bbec15cbf5eadf5d39e9a9182c6a47e", "name": "Roy"}
+                    #{"id": "U0bbec15cbf5eadf5d39e9a9182c6a47e", "name": "Roy"}
+                    {"id": "U95547b7b9b1226f08563825c7f8db533", "name": "Jando"}
                 ],
                 "template": "{status}",
             },
             "event_2": {
                 "recipients": [
-                    {"id": "U0bbec15cbf5eadf5d39e9a9182c6a47e", "name": "Roy"},
+                    #{"id": "U0bbec15cbf5eadf5d39e9a9182c6a47e", "name": "Roy"},
                     {"id": "U95547b7b9b1226f08563825c7f8db533", "name": "Jando"},
                     {"id": "Ubfd6afe6fc674dd60bb7712e3a0681b5", "name": "Alvin"},
                     {"id": "U925476ebe228a22175cfcc499cec617e", "name": "Sam"},
@@ -4719,6 +4720,9 @@ async def main():
         # logging.info(f"- HTTP API: https://cmb-caller-frontend-410240967190.asia-east1.run.app/health")
         logging.info(f"- HTTP API: {ws_url.replace('wss://', 'https://')}health")
         logging.info(f"- WebSocket: {ws_url}")
+
+        # 等待 10 秒，讓上面的 service 就緒
+        asyncio.sleep(10)
 
         interval_seconds = 2  # 每隔 interval_seconds 秒執行一次
         max_cycles = 15  # 最多執行 max_cycles 次循環

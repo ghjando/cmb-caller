@@ -146,6 +146,9 @@ gcloud beta run deploy "$SERVICE_NAME" \
 end_time=$(date +%s)
 execution_time=$((end_time - start_time))
 
+#復原 Dockerfile
+cp -a Dockerfile.live Dockerfile
+
 echo -e "\n=== 部署完成 ==="
 date || true  # 非關鍵命令，失敗時不退出
 echo "總執行時間: $execution_time 秒"

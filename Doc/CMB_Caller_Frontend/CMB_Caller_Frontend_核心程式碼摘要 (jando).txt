@@ -1,0 +1,34 @@
+[主程式]
+cmb-caller-frontend.py
+
+[初始化]
+main()
+1. (WebSocket)連線到 CMB Main Server
+cmb_main_server_client = CmbWebSocketClient(ws_url)
+
+2. (WebSocket)建立 FastAPI WebSocket Server
+frontend_server = FastAPIWebSocketServer(cmb_main_server_client)
+
+3. 啟動 FastAPI HTTP 伺服器
+http_server = uvicorn.Server(config)
+
+4. 廣播 "STOP_SERVER" 訊息，關閉舊的 instance
+broadcast_message()
+
+//=======================================
+// 與 CMB Main Server 的通訊 
+class CmbWebSocketClient:
+run()     // 初始化
+connect() // 連線到 CMB Main Server
+listen()  // 接收並處理 Main Server 封包
+
+//=======================================
+// 與 caller 及 店家網頁 的通訊
+class FastAPIWebSocketServer:
+handle_websocket_connection() // 接受 caller/店家網頁 的連線
+handler()                     // 接收 caller/店家網頁 封包
+process_message()             // 處理 caller/店家網頁 封包
+process_json_message()        // 處理 json 封包
+process_non_json_message()    // 處理非 json 封包
+
+//=======================================
