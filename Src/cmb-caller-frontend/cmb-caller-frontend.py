@@ -110,6 +110,7 @@ http://localhost:38000
 2026/06/03  Roy Ching    如果 Main Server 回覆之 result 不為 OK，則不廣播給其它店家或訪客，並在回覆中加入 "remark": "Fail! No broadcasting." 的訊息。
 2026/06/05  Roy Ching    修復 Caller 斷線重連時，資料不同步問題. 斷線重連需要衝新認證(auth)，並在 auth 後更新目前號碼資料.
 2026/06/08  Roy Ching    因 Server 已完全支援 call_number function, 故取消修補 counter_name ... 功能.
+2026/10/14  Jando Wu     新增 get_num_item_switch 命令.
 """
 
 
@@ -423,6 +424,7 @@ client_wait_reply_actions_check = {
 call_number         listen 有處理
 set_params          listen 有處理
 get_num_switch      listen 有處理
+get_num_item_switch listen 有處理
 set_time_period     listen 有處理
 web_reset_caller    listen 有處理
 """
@@ -435,6 +437,7 @@ web_reset_caller    listen 有處理
 servsr_replay_active_actions_check = {
     # "get_num_switch", "new_get_num", "reset_caller", "cancel_get_num", "reserve_number"}
     "get_num_switch",
+    "get_num_item_switch",
     "new_get_num",
     "reset_caller",
     "cancel_get_num",
@@ -2194,9 +2197,15 @@ class CmbWebSocketClient:       # 連結 CMB Main Server
                                 caller_id, f"{json.dumps(json_data)}", (0x2 + 0x4)
                             )
                             await self.process_reset(json.dumps(json_data))
-                        elif (
-                            action == "get_num_switch"
-                        ):  # get_num_switch 群發訊息至非 H/W Caller 及 訪客
+                        elif action == "get_num_switch":
+                            # get_num_switch 群發訊息至非 H/W Caller 及 訪客
+                            # logging.info(f"群發訊息至 caller_id={caller_id}: {json.dumps(json_data)}")
+                            # logging.info(f"群發訊息至 caller_id:{caller_id}, action:{json_data.get('action', '')}, switch:{json_data.get('switch', '')}")
+                            await client_manager.notify_clients(
+                                caller_id, f"{json.dumps(json_data)}", (0x2 + 0x4)
+                            )
+                        elif action == "get_num_item_switch":
+                            # get_num_item_switch 群發訊息至非 H/W Caller 及 訪客
                             # logging.info(f"群發訊息至 caller_id={caller_id}: {json.dumps(json_data)}")
                             # logging.info(f"群發訊息至 caller_id:{caller_id}, action:{json_data.get('action', '')}, switch:{json_data.get('switch', '')}")
                             await client_manager.notify_clients(
